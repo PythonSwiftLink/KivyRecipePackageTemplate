@@ -1,6 +1,6 @@
 # This workflow will build a KivySwiftLink release
 
-name: release builder v4
+name: make release
 
 
 on:
@@ -26,10 +26,8 @@ jobs:
     env:
       recipe: custom_lib
       path: custom_lib
+      site_files: custom_lib, custom_lib
       
-    strategy:
-      matrix:
-        version: [10, 11, 12]
   
     steps:
       - uses: maxim-lobanov/setup-xcode@v1
@@ -41,7 +39,7 @@ jobs:
       - name: setup python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.${{ matrix.version }}' # install the python version needed
+          python-version: '3.11' # install the python version needed
       
       - name: brew installs
         run: |
@@ -73,6 +71,8 @@ jobs:
           ##### apply modified kivy to recipe as "src" #####
           mv kivy kivy-ios/kivy_ios/recipes/kivy/src
 
+          cp -r ${{env.recipe_path}} kivy-ios/kivy_ios/recipes/
+
       - name: modify kivy recipe
         shell: python
         run: |
@@ -91,48 +91,18 @@ jobs:
       #### build phase ####
       
       - name: build hostpython3
-        run: |
-          #toolchain build hostpython3
-          if [ ${{ matrix.version }} == "10" ]
-          then
-            toolchain build hostpython3==3.10.13
-          elif [ ${{ matrix.version }} == "11" ]
-          then
-            toolchain build hostpython3==3.11.6
-          elif [ ${{ matrix.version }} == "12" ]
-          then
-            toolchain build hostpython3==3.12.1
-          else
-            toolchain build hostpython3
-          fi
+        run: toolchain build hostpython3
 
 
       - name: build python3
-        run: 
-          if [[ ${{ matrix.version }} == 10 ]]; then
-            toolchain build python3==3.10.13
-          else if [[ ${{ matrix.version }} == 11 ]]; then
-            toolchain build python3==3.11.6
-          else if [[ ${{ matrix.version }} == 12 ]]; then
-            toolchain build python3==3.12.1
-          else
-            toolchain build python3
-          fi
+        run: toolchain build python3
 
-
-      - name: build numpy
-        run: toolchain build numpy
+      - name: build custom recipe
+        run: toolchain build ${{env.recipe}}
 
       - name: move numpy build
         run: |
-          mkdir -p output/numpy/headers
-          BUILD_HEADERS=build/numpy/iphoneos-arm64/numpy-1.24.4/build/src.macosx-13.6-x86_64-3.${{ matrix.version }}/numpy/core/include/numpy/
-          cp -f $BUILD_HEADERS/__multiarray_api.h output/numpy/headers/
-          cp -f $BUILD_HEADERS/__ufunc_api.h output/numpy/headers/
-          cp -f $BUILD_HEADERS/_numpyconfig.h output/numpy/headers/
-          cp -f $BUILD_HEADERS/_umath_doc_generated.h output/numpy/headers/
-          DIST_HEADERS=dist/include/common/numpy/numpy
-          mv -f $DIST_HEADERS/* output/numpy/headers/
+          mkdir -p output/${{env.recipe}}/
 
           PY_SITE=dist/root/python3/lib/python3.${{ matrix.version }}/site-packages
           mv -f $PY_SITE/numpy output/numpy/numpy-site
