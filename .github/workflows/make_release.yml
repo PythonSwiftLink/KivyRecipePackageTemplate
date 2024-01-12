@@ -27,6 +27,8 @@ jobs:
       recipe: custom_lib
       path: custom_lib
       site_files: custom_lib, custom_lib
+
+      lib: dist/root/python3/lib
       
   
     steps:
@@ -102,60 +104,42 @@ jobs:
 
       - name: move numpy build
         run: |
-          mkdir -p output/${{env.recipe}}/
+          RECIPE=${{env.recipe}}
+          mkdir -p output/$RECIPE/lib
+          mkdif -p output/$RECIPE/site-packages
 
-          PY_SITE=dist/root/python3/lib/python3.${{ matrix.version }}/site-packages
-          mv -f $PY_SITE/numpy output/numpy/numpy-site
-          rm -rf $PY_SITE/*
-          cd output/numpy
-          zip -r numpy-site.zip numpy-site
-          rm -rf numpy-site
+          PY_SITE=${{env.lib}}/python3.11/site-packages
+          for FILE in ${{env.site_files}}
+          do 
+            mv -f $PY_SITE/$FILE output/$RECIPE/site-packages
+          done
+          
+          zip -r site-packages.zip site-packages
+          rm -rf site-packages
 
-      - name: build kivy
-        run: toolchain build kivy
-      - name: build pillow
-        run: toolchain build pillow
       
-
       # taking out necessary libraries and zipping them into "output" folder
       - name: repack python3.${{ matrix.version }} / numpy xcframework
         run: |
-          #mkdir output
-          cp -rf dist/xcframework output/
-          
-          PY_HEADERS=dist/root/python3/include/python3.${{ matrix.version }}
-          PY_XC=output/xcframework/libpython3.${{ matrix.version }}.xcframework
-          cp -rf $PY_HEADERS $PY_XC/ios-arm64/
-          cp -rf $PY_HEADERS $PY_XC/ios-x86_64-simulator/
-          cp -f plists/python3${{ matrix.version }}.plist $PY_XC/Info.plist
-
-          NUMPY_HEADERS=dist/include/common/numpy/numpy
-          NUMPY_XC=output/xcframework/libnumpy.xcframework
-          cp -rf $NUMPY_HEADERS $NUMPY_XC/ios-arm64/
-          cp -rf $NUMPY_HEADERS $NUMPY_XC/ios-x86_64-simulator/
-          cp -f plists/numpy.plist $NUMPY_XC/Info.plist
+          cp -rf dist/xcframework/lib${{env.recipe}}.xcframework output/
+        
 
       
-      - name: repack & zip python site-packages
+      - name: repack & zip lib/lib.a files
+        working-directory: output/${{env.recipe}}
         run: |
-          PY_LIB=dist/root/python3/lib
-          mkdir -p output/python
-          mkdir -p output/kivy
-
-          mv $PY_LIB/python3.${{ matrix.version }}/site-packages site-packages
-          zip -r site-packages.zip site-packages
-          mv -f site-packages.zip output/kivy/
-          
-          mv $PY_LIB output/python/python_lib
-          #mv $PY_LIB python_lib
-          #zip -r python_lib.zip python_lib
-          #mv -f python_lib.zip output/python/
+          PY_LIB=${{env.lib}}
+          RECIPE=${{env.recipe}}
+          cp $PY_LIB/lib$RECIPE.a lib/
+          zip lib.zip lib/*
           
 
       - name: repack & zip dist_libs
         id: repack_dist
         run: |
-          mv dist/lib output/dist_lib
+          RECIPE=${{env.recipe}}
+          mkdir -p output/dist_lib
+          mv dist/lib/lib$RECIPE.a output/dist_lib/
           cd output
           IOS_LIBS=dist_lib/iphoneos
           SIM_LIBS=dist_lib/iphonesimulator
@@ -163,69 +147,28 @@ jobs:
           echo $IOS_LIBS
           echo $SIM_LIBS
 
-          ###### numpy #######
-          mkdir -p numpy/$IOS_LIBS
-          mv -f $IOS_LIBS/libnpymath.a numpy/$IOS_LIBS/
-          mv -f $IOS_LIBS/libnpyrandom.a numpy/$IOS_LIBS/
-          mv -f $IOS_LIBS/libnumpy.a numpy/$IOS_LIBS/
-          echo transfered numpy/$IOS_LIBS
-
-
-          mkdir -p numpy/$SIM_LIBS
-          mv -f $SIM_LIBS/libnpymath.a numpy/$SIM_LIBS/
-          mv -f $SIM_LIBS/libnpyrandom.a numpy/$SIM_LIBS/
-          mv -f $SIM_LIBS/libnumpy.a numpy/$SIM_LIBS/
-          echo transfered numpy/$SIM_LIBS
-
-          ###### python ######
-
-          mkdir -p python/$IOS_LIBS
-          mv -f $IOS_LIBS/libcrypto.a python/$IOS_LIBS/
-          mv -f $IOS_LIBS/libssl.a python/$IOS_LIBS/
-          mv -f $IOS_LIBS/libffi.a python/$IOS_LIBS/
-          mv -f $IOS_LIBS/libpython3.${{ matrix.version }}.a python/$IOS_LIBS/
-          echo transfered python/$IOS_LIBS
-
-          mkdir -p python/$SIM_LIBS
-          mv -f $SIM_LIBS/libcrypto.a python/$SIM_LIBS/
-          mv -f $SIM_LIBS/libssl.a python/$SIM_LIBS/
-          mv -f $SIM_LIBS/libffi.a python/$SIM_LIBS/
-          mv -f $SIM_LIBS/libpython3.${{ matrix.version }}.a python/$SIM_LIBS/
-          echo transfered python/$SIM_LIBS
-
-
-          ###### kivy #######
-          mkdir -p kivy/$IOS_LIBS
-          mv -f $IOS_LIBS kivy/$IOS_LIBS
-          echo transfered kivy/$IOS_LIBS
-
-          mkdir -p kivy/$SIM_LIBS
-          mv -f $SIM_LIBS kivy/$SIM_LIBS
-          echo transfered python/$SIM_LIBS
-
-      - name: python_dist.zip
-        working-directory: output/python
-        run: |
-          zip -r python_dist.zip dist_lib
-          rm -rf dist_lib
-
-      - name: kivy_dist.zip
-        working-directory: output/kivy
-        run: |
-          zip -r kivy_dist.zip dist_lib
-          rm -rf dist_lib
-      
-      - name: numpy_dist.zip
-        working-directory: ./output/numpy
-        run: |
-          zip -r numpy_dist.zip dist_lib
-          rm -rf dist_lib
+          ###### DIST FILES #######
           
+          mkdir -p $RECIPE/$IOS_LIBS
+          mv -f $IOS_LIBS/$RECIPE.a $RECIPE/$IOS_LIBS/
+          echo transfered $RECIPE/$IOS_LIBS
+
+          mkdir -p $RECIPE/$SIM_LIBS
+          mv -f $SIM_LIBS/lib$RECIPE.a $RECIPE/$SIM_LIBS/
+          echo transfered $RECIPE/$SIM_LIBS
+
+        
+          
+
+      - name: recipe_dist.zip
+        working-directory: output/${{env.recipe}}
+        run: |
+          zip -r dist_lib.zip dist_lib
+          rm -rf dist_lib
 
       - name: move and zip xcframeworks
         working-directory: ./output/xcframework
         run: |
-          mv -f libpython3.${{ matrix.version }}.xcframework libpython3${{ matrix.version }}.xcframework
           for FILE in *; 
               do 
                   #filename="$FILE"
@@ -234,55 +177,19 @@ jobs:
                   rm -rf $FILE
               done
 
-      - name: pack python xcframeworks
-        working-directory: ./output
-        run: |
-          mkdir python/xcframework
-
-          mv -f xcframework/libcrypto.zip python/xcframework/
-          mv -f xcframework/libffi.zip python/xcframework/
-          mv -f xcframework/libssl.zip python/xcframework/
-          mv -f xcframework/libpython3${{ matrix.version }}.zip python/xcframework/
-    
-      - name: pack numpy xcframeworks
-        working-directory: ./output
-        run: |
-          mkdir numpy/xcframework
-
-          mv -f xcframework/libnumpy.zip numpy/xcframework/
-          mv -f xcframework/libnpyrandom.zip numpy/xcframework/
-          mv -f xcframework/libnpymath.zip numpy/xcframework/
-
-      - name: pack xcframeworks as kivy
-        working-directory: ./output
-        run: |
-          mv -f xcframework kivy/
       
-      - name: update Python package.swift
+      - name: update package.swift
         run: |
           SwiftPackageGen \
-            ./package_templates/KivyPythonCore.yml \
-            3${{ matrix.version }}.${{ github.event.inputs.tag }} \
-            --output output/python/Package.swift
+            ./package.yml \
+            311.${{ github.event.inputs.tag }} \
+            --output output/${{env.recipe}}/Package.swift
       
-      - name: update Kivy package.swift
-        run: |
-          SwiftPackageGen \
-            ./package_templates/KivyCore.yml \
-            3${{ matrix.version }}.${{ github.event.inputs.tag }} \
-            --output output/kivy/Package.swift
-
-      - name: update Numpy package.swift
-        run: |
-          SwiftPackageGen \
-            ./package_templates/KivyNumpy.yml \
-            3${{ matrix.version }}.${{ github.event.inputs.tag }} \
-            --output output/numpy/Package.swift            
           
       # uploading "output" folder for the next task to use. (ubuntu machine)
       - uses: actions/upload-artifact@v3
         with:
-          name: release-output-3${{ matrix.version }}
+          name: release-output
           path: ./output
 
   ###############################################################################
@@ -293,9 +200,7 @@ jobs:
     name: Release Packages
     runs-on: ubuntu-latest
     needs: [toolchainBuild]
-    strategy:
-      matrix:
-        version: [10, 11, 12]
+
 
     steps:
       - uses: actions/checkout@v4
@@ -304,13 +209,14 @@ jobs:
 
       - uses: actions/download-artifact@v3
         with:
-          name: release-output-3${{ matrix.version }}
+          name: release-output
 
-      - name: create KivyPythonCore
+      - name: create recipe swift package
         run: |
-          #cp -rf package_templates/KivyPythonCore KivyPythonCore
-          mkdir -p KivyPythonCore/Sources
-          cp -rf package_templates/PythonLibrary KivyPythonCore/Sources/
+          RECIPE=${{env.recipe}}
+          SOURCES=$RECIPE/Sources
+          mkdir -p $SOURCES
+          cp -rf package_templates/PythonLibrary $SOURCES/
           cp -f python/Package.swift KivyPythonCore/
           cp -rf package_templates/PythonCore/Sources/PythonCore KivyPythonCore/Sources/
 
